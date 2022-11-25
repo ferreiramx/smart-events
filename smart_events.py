@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 
 # Pages
 
-pages = ["Eventos Similares", "Compras", "Demográfica", "Fuentes"]
+pages = ["Compras", "Demográfica", "Fuentes"]
 
 # Sidebar
 st.sidebar.header("Configuración")
@@ -21,8 +21,8 @@ similar_events = utils.load_similar_events(event_id, price_threshold)
 
 # Streamlit page title
 st.title('Boletia Smart Events')
-st.metric(label="Evento", value=f"{event_data['NAME']}", delta=None)
-#st.metric(label="Evento", value="Ejemplo", delta=None)
+#st.metric(label="Evento", value=f"{event_data['NAME']}", delta=None)
+st.metric(label="Evento", value="Ejemplo", delta=None)
 
 # Columns for event info
 info_1, info_2, info_3 = st.columns(3, gap="small")
@@ -32,8 +32,8 @@ info_1.metric(
     delta=None)
 info_2.metric(
     label="Ubicación",
-    value=f"{event_data['CITY']}, {event_data['STATE']}",
-    #value=f"{event_data['CITY']}",
+    #value=f"{event_data['CITY']}, {event_data['STATE']}",
+    value="Ejemplo",
     delta=None)
 info_3.metric(
     label="Inicio",
