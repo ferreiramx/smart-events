@@ -116,6 +116,11 @@ def load_bookings_by_date(event_id):
             left join prod.events.events e on e.event_id = cb.event_id
             where cb.event_id in ({','.join(event_id)})
             and cb.paid_at > coalesce(e.activated_at, e.created_at)
+            and timestampdiff(
+                    day,
+                    convert_timezone('America/Mexico_City', coalesce(e.activated_at, e.created_at)),
+                    convert_timezone('America/Mexico_City', cb.paid_at)
+                    ) between 0 and 180
             group by 1
             order by 1
             """
@@ -211,7 +216,7 @@ def get_coordinates(df):
 @st.cache
 def load_pageviews(event_id):
     # Execute a query to extract the data
-    sql = f"""select
+    sql = f"""with pv as (select
                 case
                     when PAGE_PATH like '%/finish' then 'Pago'
                     when PAGE_PATH like '%/pay' then 'Checkout'
@@ -229,11 +234,20 @@ def load_pageviews(event_id):
                                   SUBDOMAIN || '.boletia.com/info',
                                   SUBDOMAIN || '.boletia.com/pay',
                                   SUBDOMAIN || '.boletia.com/finish')
-                order by PAGEVIEWS DESC
-                    """
+                order by PAGEVIEWS DESC),
+                default_pv as (
+                    select $1 as PAGE_PATH, $2 as PAGEVIEWS from (values ('Inicio', 0), ('Info', 0), ('Checkout', 0), ('Pago', 0))
+                )
+                select d.PAGE_PATH, coalesce(pv.PAGEVIEWS, d.PAGEVIEWS) as PAGEVIEWS
+                from default_pv as d
+                left join pv on pv.PAGE_PATH = d.PAGE_PATH
+                """
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    stages = CategoricalDtype(["Inicio", "Info", "Checkout", "Pago"], ordered=True)
+    df["PAGE_PATH"] = df["PAGE_PATH"].astype(stages)
+    df = df.sort_values('PAGE_PATH')
     return df
 
 
@@ -304,7 +318,7 @@ def load_pageviews_by_source_medium(event_id):
 def get_funnel(df, group_by_field):
     stages = CategoricalDtype(["Inicio", "Info", "Checkout", "Pago"], ordered=True)
     df["PAGE_PATH"] = df["PAGE_PATH"].astype(stages)
-    df.sort_values('PAGE_PATH')
+    df = df.sort_values('PAGE_PATH')
     # pivot the source_medium values into columns
     df = df.pivot_table('PAGEVIEWS', 'PAGE_PATH', group_by_field)
     # replacing nan values to zeros

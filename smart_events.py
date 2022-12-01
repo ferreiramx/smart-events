@@ -223,17 +223,20 @@ if selected_page == "Fuentes":
         # Create visualization for SALES BY SOURCE MEDIUM
         L, R = st.columns(2, gap="large")
         L.subheader('Compras por fuente y medio')
-        data = pd.DataFrame({'Compras': data.loc['Pago']}).astype('float')
-        complete_data = data[data['Compras'] > 0].astype('int')
-        if len(complete_data) > 0:
-            MIN_PAGEVIEWS = 30
-            data = utils.adjust_to_piechart(complete_data.copy(), MIN_PAGEVIEWS)
-            fig = px.pie(data, values='Compras', names=data.index)
-            L.plotly_chart(fig, use_container_width=True)
-            R.subheader('Fuentes y medios completos')
-            R.write(complete_data.sort_values(by='Compras', ascending=False))
+        if len(data) > 0:
+            data = pd.DataFrame({'Compras': data.loc['Pago']}).astype('float')
+            complete_data = data[data['Compras'] > 0].astype('int')
+            if len(complete_data) > 0:
+                MIN_PAGEVIEWS = 30
+                data = utils.adjust_to_piechart(complete_data.copy(), MIN_PAGEVIEWS)
+                fig = px.pie(data, values='Compras', names=data.index)
+                L.plotly_chart(fig, use_container_width=True)
+                R.subheader('Fuentes y medios completos')
+                R.write(complete_data.sort_values(by='Compras', ascending=False))
+            else:
+                L.warning("No hay datos en este momento.")
         else:
-            L.write("No hay datos en este momento.")
+            L.warning("No hay datos en este momento.")
 
 
 if selected_page == "Ventas":
@@ -243,19 +246,21 @@ if selected_page == "Ventas":
         L, R = st.columns(2, gap="large")
         L.subheader('Funnel de ventas')
         data = utils.load_pageviews(event_id)
-        if len(data) > 0:
-            #fig = px.bar(data, y="PAGE_PATH", x="PAGEVIEWS",
-             #            orientation='h')
-            fig = px.funnel(data, x='PAGEVIEWS', y='PAGE_PATH')
+        if data[data['PAGE_PATH'] == 'Inicio']['PAGEVIEWS'].all(0):
+            fig = px.funnel(data, x='PAGEVIEWS', y="PAGE_PATH")
             L.plotly_chart(fig, use_container_width=True)
         else:
             L.warning("No hay datos en este momento.")
 
         # Create metric for SALES CONVERSION RATE
         R.subheader('Tasa de conversion de ventas')
-        CR = float(data['PAGEVIEWS'][3]) / float(data['PAGEVIEWS'][0]) * 100
-        CR = "%.2f"%CR # formating to 2 decimals
-        R.metric(label="Conversion Rate", value=f'{CR}%', delta=None)
+        if data[data['PAGE_PATH'] == 'Inicio']['PAGEVIEWS'].all(0):
+            print(data)
+            CR = float(data[data['PAGE_PATH'] == 'Pago']["PAGEVIEWS"]) / float(data[data['PAGE_PATH'] == 'Inicio']["PAGEVIEWS"]) * 100
+            CR = "%.2f" % CR  # formating to 2 decimals
+            R.metric(label="Conversion Rate", value=f'{CR}%', delta=None)
+        else:
+            R.warning("No hay datos en este momento.")
 
     funnel_medium_container = st.container()
     with funnel_medium_container:
@@ -266,4 +271,4 @@ if selected_page == "Ventas":
             data = utils.get_funnel(data, 'MEDIUM')
             st.write(data)
         else:
-            st.write("No hay datos en este momento.")
+            st.warning("No hay datos en este momento.")
