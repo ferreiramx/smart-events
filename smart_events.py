@@ -1,46 +1,58 @@
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 import utils
+import config
 from datetime import datetime
 
 st.set_page_config(layout="wide")
 
-# Pages
-
-pages = ["Compras", "Demográfica", "Fuentes"]
 
 # Sidebar
 st.sidebar.header("Configuración")
-selected_page = st.sidebar.selectbox("Pagina", pages, 0)
-event_id = st.sidebar.text_input("Event ID", "201898")
+
+# Read variables from config if prod deployment, else let the user write it in
+if config.TARGET == 'DEV':
+    pages = ["Eventos Similares", "Compras", "Demográfica", "Ventas", "Fuentes"]
+    selected_page = st.sidebar.selectbox("Pagina", pages, 0)
+    event_id = st.sidebar.text_input("Event ID", "201898")
+    price_threshold = st.sidebar.slider("% rango de precio", min_value=0.0, max_value=1.0, value=0.1)
+elif config.TARGET in ['PROD', 'DEMO']:
+    pages = ["Compras", "Demográfica", "Ventas", "Fuentes"]
+    selected_page = st.sidebar.selectbox("Pagina", pages, 0)
+    event_id = config.EVENT_ID
+    price_threshold = config.PRICE_RANGE
 event_data = utils.load_event_data(event_id)
-price_threshold = st.sidebar.slider(
-    "% rango de precio", min_value=0.0, max_value=1.0, value=0.1)
-similar_events = utils.load_similar_events(event_id, price_threshold)
+
+# If hardcoded similar events are set, use them
+if config.SIMILAR_EVENTS == '':
+    similar_events = utils.load_similar_events(event_id, price_threshold)
+else:
+    similar_events = utils.load_static_event_list(config.SIMILAR_EVENTS.split(','))
 
 
 # Streamlit page title
 st.title('Boletia Smart Events')
-#st.metric(label="Evento", value=f"{event_data['NAME']}", delta=None)
-st.metric(label="Evento", value="Ejemplo", delta=None)
+st.metric(label="Evento", value=f"{event_data['NAME'] if config.TARGET != 'DEMO' else 'Ejemplo'}", delta=None)
+
 
 # Columns for event info
 info_1, info_2, info_3 = st.columns(3, gap="small")
 info_1.metric(
     label="Categoría",
-    value=f"{event_data['SUBCATEGORY']}",
+    value=f"{event_data['SUBCATEGORY']  if config.TARGET != 'DEMO' else 'Evento'}",
     delta=None)
 info_2.metric(
     label="Ubicación",
-    #value=f"{event_data['CITY']}, {event_data['STATE']}",
-    value="Ejemplo",
+    value=f"{event_data['CITY'] if config.TARGET != 'DEMO' else 'Ciudad'}, {event_data['STATE'] if config.TARGET != 'DEMO' else 'Estado'}",
     delta=None)
 info_3.metric(
     label="Inicio",
-    value=f"{event_data['STARTED_AT'].strftime('%d/%m/%Y %H:%M')}",
+    value=f"{event_data['STARTED_AT'].strftime('%d/%m/%Y %H:%M')  if config.TARGET != 'DEMO' else '2023-01-01'}",
     delta=None)
 
 st.write("---", unsafe_allow_html=True)
+
 
 if selected_page == "Eventos Similares":
     st.subheader("Eventos similares")
@@ -65,6 +77,7 @@ if selected_page == "Compras":
         value="${:0,.2f}".format(event_data['TOTAL_TICKET_SALES']),
         delta=None
     )
+
     bookings_container = st.container()
     with bookings_container:
         L, R = st.columns(2, gap="large")
@@ -109,6 +122,7 @@ if selected_page == "Compras":
             R.plotly_chart(fig, use_container_width=True)
         else:
             R.warning("No hay datos en este momento.")
+
     payment_method_container = st.container()
     with payment_method_container:
         L, R = st.columns(2, gap="large")
@@ -138,10 +152,11 @@ if selected_page == "Demográfica":
         st.subheader('Ubicación de los compradores')
         data = utils.load_bookings_by_city(event_id)
         data = utils.get_coordinates(data)
+        #st.write(data)
         if len(data) > 0:
             fig = px.scatter_geo(data, lat='LAT', lon='LON', size='TOTAL_BOOKINGS',
                         hover_name='CITY', color='TOTAL_BOOKINGS', size_max=50,
-                        scope='north america', projection="natural earth")
+                        projection="natural earth")
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No hay datos en este momento.")
@@ -166,6 +181,7 @@ if selected_page == "Demográfica":
         else:
             R.warning("No hay datos en este momento.")
             R.empty()
+
     gender_container = st.container()
     with gender_container:
         L, R = st.columns(2, gap="large")
@@ -191,12 +207,63 @@ if selected_page == "Demográfica":
 
 
 if selected_page == "Fuentes":
-    # Create visualization for SALES FUNNEL of the event
-    st.subheader('Funnel de ventas por fuente y medio')
-    data = utils.load_pageviews(event_id)
-    if len(data) > 0:
-        data = utils.get_funnel(data)
-        
-        st.write(data)
-    else:
-        st.warning("No hay datos en este momento.")
+    funnel_source_medium_container = st.container()
+    with funnel_source_medium_container:
+        # Create visualization for SALES FUNNEL BY SOURCE/MEDIUM
+        st.subheader('Funnel de ventas por fuente y medio')
+        data = utils.load_pageviews_by_source_medium(event_id)
+        if len(data) > 0:
+            data = utils.get_funnel(data, 'SOURCE_MEDIUM')
+            st.write(data)
+        else:
+            st.warning("No hay datos en este momento.")
+
+    piechart_container = st.container()
+    with piechart_container:
+        # Create visualization for SALES BY SOURCE MEDIUM
+        L, R = st.columns(2, gap="large")
+        L.subheader('Compras por fuente y medio')
+        data = pd.DataFrame({'Compras': data.loc['Pago']}).astype('float')
+        complete_data = data[data['Compras'] > 0].astype('int')
+        if len(complete_data) > 0:
+            MIN_PAGEVIEWS = 30
+            data = utils.adjust_to_piechart(complete_data.copy(), MIN_PAGEVIEWS)
+            fig = px.pie(data, values='Compras', names=data.index)
+            L.plotly_chart(fig, use_container_width=True)
+            R.subheader('Fuentes y medios completos')
+            R.write(complete_data.sort_values(by='Compras', ascending=False))
+        else:
+            L.write("No hay datos en este momento.")
+
+
+if selected_page == "Ventas":
+    sales_funnel_container = st.container()
+    with sales_funnel_container:
+        # Create visualization for SALES FUNNEL
+        L, R = st.columns(2, gap="large")
+        L.subheader('Funnel de ventas')
+        data = utils.load_pageviews(event_id)
+        if len(data) > 0:
+            #fig = px.bar(data, y="PAGE_PATH", x="PAGEVIEWS",
+             #            orientation='h')
+            fig = px.funnel(data, x='PAGEVIEWS', y='PAGE_PATH')
+            L.plotly_chart(fig, use_container_width=True)
+        else:
+            L.warning("No hay datos en este momento.")
+
+        # Create metric for SALES CONVERSION RATE
+        R.subheader('Tasa de conversion de ventas')
+        CR = float(data['PAGEVIEWS'][3]) / float(data['PAGEVIEWS'][0]) * 100
+        CR = "%.2f"%CR # formating to 2 decimals
+        R.metric(label="Conversion Rate", value=f'{CR}%', delta=None)
+
+    funnel_medium_container = st.container()
+    with funnel_medium_container:
+        # Create visualization for SALES FUNNEL BY MEDIUM
+        st.subheader('Funnel de ventas por fuente')
+        data = utils.load_pageviews_by_medium(event_id)
+        if len(data) > 0:
+            data = utils.get_funnel(data, 'MEDIUM')
+            st.write(data)
+        else:
+            st.write("No hay datos en este momento.")

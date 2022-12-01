@@ -74,6 +74,30 @@ def load_similar_events(event_id, price_threshold):
     df = cur.fetch_pandas_all()
     return df
 
+
+# Get a static set events from a list of IDs
+
+
+@st.cache
+def load_static_event_list(id_list):
+    # Execute a query to extract the data
+    sql = f"""
+            select
+                event_id,
+                name,
+                subcategory,
+                city,
+                state,
+                average_ticket_price,
+                channel_type
+            from PROD.EVENTS.EVENTS
+            where event_id in ({",".join(id_list)})
+            """
+    cur.execute(sql)
+    # Converting data into a dataframe
+    df = cur.fetch_pandas_all()
+    return df
+
 # Function to get the total number of bookings by date
 
 
@@ -105,12 +129,13 @@ def load_bookings_by_payment_method(event_id):
     # Execute a query to extract the data
     sql = f"""
             select
-                payment_method,
+                split_part(payment_method, '::', 2) as payment_method,
                 count(*) as compras
             from PROD.EVENTS.COMPLETED_BOOKINGS cb
             left join prod.events.events e on e.event_id = cb.event_id
             where cb.event_id in ({','.join(event_id)})
             and cb.paid_at > coalesce(e.activated_at, e.created_at)
+            and payment_method is not null
             group by 1
             order by 1
             """
@@ -175,7 +200,8 @@ def get_coordinates(df):
     df['LAT'] = np.nan
     df['LON'] = np.nan
     for i in df.index:
-        location = geolocator.geocode(df['CITY'][i])
+        city = df['CITY'][i] + ', ' + df['COUNTRY'][i]
+        location = geolocator.geocode(city)
         df['LAT'][i] = location.latitude
         df['LON'][i] = location.longitude
     return df
@@ -192,9 +218,70 @@ def load_pageviews(event_id):
                     when PAGE_PATH like '%/info' then 'Info'
                     else 'Inicio'
                 end as PAGE_PATH,
-                SOURCE_MEDIUM,
                 PAGEVIEWS
                 from EVENTS.SALES_FUNNELS
+                where SUBDOMAIN =
+                    (select subdomain
+                    from EVENTS.EVENTS
+                    where EVENT_ID = {event_id})
+                and PAGE_PATH in (
+                                  SUBDOMAIN || '.boletia.com/',
+                                  SUBDOMAIN || '.boletia.com/info',
+                                  SUBDOMAIN || '.boletia.com/pay',
+                                  SUBDOMAIN || '.boletia.com/finish')
+                order by PAGEVIEWS DESC
+                    """
+    cur.execute(sql)
+    # Converting data into a dataframe
+    df = cur.fetch_pandas_all()
+    return df
+
+
+# Function to get the events pageviews by source/medium
+@st.cache
+def load_pageviews_by_medium(event_id):
+    # Execute a query to extract the data
+    sql = f"""select
+                case
+                    when PAGE_PATH like '%/finish' then 'Pago'
+                    when PAGE_PATH like '%/pay' then 'Checkout'
+                    when PAGE_PATH like '%/info' then 'Info'
+                    else 'Inicio'
+                end as PAGE_PATH,
+                MEDIUM,
+                PAGEVIEWS
+                from EVENTS.SALES_FUNNELS_BY_MEDIUM
+                where SUBDOMAIN =
+                    (select subdomain
+                    from EVENTS.EVENTS
+                    where EVENT_ID = {event_id})
+                and PAGE_PATH in (
+                                  SUBDOMAIN || '.boletia.com/',
+                                  SUBDOMAIN || '.boletia.com/info',
+                                  SUBDOMAIN || '.boletia.com/pay',
+                                  SUBDOMAIN || '.boletia.com/finish')
+                order by PAGEVIEWS desc
+                    """
+    cur.execute(sql)
+    # Converting data into a dataframe
+    df = cur.fetch_pandas_all()
+    return df
+
+
+# Function to get the events pageviews by source/medium
+@st.cache
+def load_pageviews_by_source_medium(event_id):
+    # Execute a query to extract the data
+    sql = f"""select
+                case
+                    when PAGE_PATH like '%/finish' then 'Pago'
+                    when PAGE_PATH like '%/pay' then 'Checkout'
+                    when PAGE_PATH like '%/info' then 'Info'
+                    else 'Inicio'
+                end as PAGE_PATH,
+                SOURCE_MEDIUM,
+                PAGEVIEWS
+                from EVENTS.SALES_FUNNELS_BY_SOURCE_MEDIUM
                 where SUBDOMAIN =
                     (select subdomain
                     from EVENTS.EVENTS
@@ -214,12 +301,12 @@ def load_pageviews(event_id):
 
 # Function to pivot the data and process the table
 @st.cache
-def get_funnel(df):
+def get_funnel(df, group_by_field):
     stages = CategoricalDtype(["Inicio", "Info", "Checkout", "Pago"], ordered=True)
     df["PAGE_PATH"] = df["PAGE_PATH"].astype(stages)
     df.sort_values('PAGE_PATH')
     # pivot the source_medium values into columns
-    df = df.pivot_table('PAGEVIEWS', 'PAGE_PATH', 'SOURCE_MEDIUM')
+    df = df.pivot_table('PAGEVIEWS', 'PAGE_PATH', group_by_field)
     # replacing nan values to zeros
     df = df.fillna(0)
     df = df.T
@@ -235,10 +322,23 @@ def load_bookings_by_city(event_id):
     # Execute a query to extract the data
     sql = f"""select *
                 from EVENTS.CUSTOMER_DEMOGRAPHICS_CITY
-                where event_id = {event_id}
+                where event_id = {event_id} and CITY <> '(not set)'
                 order by TOTAL_BOOKINGS DESC
                 """
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    return df
+
+
+# Function to adjust the data for the pie chart
+# grouping the rows under <min_value> in a new row named 'others'
+def adjust_to_piechart(df, min_value):
+    others_count = 0
+    for i in df.index:
+        if df['Compras'][i] < min_value:
+            others_count += df['Compras'][i]
+            df.drop(i, inplace=True)
+    if others_count > 0:
+        df.loc['Others'] = others_count
     return df
