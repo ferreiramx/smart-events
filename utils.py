@@ -147,6 +147,7 @@ def load_bookings_by_payment_method(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace('Banwire', 'Tarjeta de credito')
     return df
 
 # Function to get the total number of customers by age bracket
@@ -195,6 +196,8 @@ def load_bookings_by_week_day(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'])
     return df
 
 
@@ -279,6 +282,7 @@ def load_pageviews_by_medium(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['(none)', 'referral', 'organic'], ['directo', 'referido', 'organico'])
     return df
 
 
@@ -310,6 +314,7 @@ def load_pageviews_by_source_medium(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace('(direct) / (none)', 'directo')
     return df
 
 
@@ -347,12 +352,49 @@ def load_bookings_by_city(event_id):
 
 # Function to adjust the data for the pie chart
 # grouping the rows under <min_value> in a new row named 'others'
-def adjust_to_piechart(df, min_value):
+def adjust_to_piechart(df, num_cat):
     others_count = 0
+    df = df.sort_values(by='Compras', ascending=False).reset_index()
+    df['SM'] = ''
     for i in df.index:
-        if df['Compras'][i] < min_value:
+        if i>=num_cat:
             others_count += df['Compras'][i]
             df.drop(i, inplace=True)
+        else:
+            df['SM'][i] = df['SOURCE_MEDIUM'][i] + '\t' + str(df['Compras'][i])
     if others_count > 0:
-        df.loc['Others'] = others_count
+        df = df.append({'SOURCE_MEDIUM': 'otros fuentes/medios', 'Compras': others_count,
+                        'SM': f'otros fuentes/medios\t{others_count}'}, ignore_index=True)
     return df
+
+
+# Function to join the main event data with the similar events data
+def join_data(df1, df2):
+    df1['EVENTO'] = 'Este evento'
+    df2['EVENTO'] = 'Similares'
+    df3 = pd.concat([df1, df2], axis=0)
+    return df3
+
+@st.cache
+def load_customers_by_gender_age(event_id):
+    # Execute a query to extract the data
+    sql = f"""select *
+                    from EVENTS.CUSTOMER_DEMOGRAPHICS_GENDER_AGE
+                    where event_id in ({','.join(event_id)})
+                    """
+    cur.execute(sql)
+    # Converting data into a dataframe
+    df = cur.fetch_pandas_all()
+    df = df.replace(['female', 'male'], ['Mujeres', 'Hombres'])
+    return df
+
+def get_5_sources_mediums(df, column):
+    df = df[df['PAGE_PATH']=='Inicio']
+    df = df.sort_values(by='PAGEVIEWS', ascending=False)
+    names = []
+    for i in df.index:
+        names.append(df[column][i])
+    if len(names) > 5:
+        return names[:5]
+    else:
+        return names
