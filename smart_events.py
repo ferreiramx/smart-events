@@ -619,6 +619,8 @@ if selected_page == "Ventas":
         data = utils.load_pageviews_by_medium(event_id)
         tabs_names = utils.get_5_sources_mediums(data, 'MEDIUM')
         tabs_names.insert(0, 'General')
+        if len(tabs_names) < 6:
+            tabs_names += [''] * (6 - len(tabs_names))
         tg, t1, t2, t3, t4, t5 = st.tabs(tabs_names)
 
         with tg:
