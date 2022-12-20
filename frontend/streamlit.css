@@ -1,0 +1,70 @@
+/* BODY*/
+section.main {
+    background-color: #F7F7F7;
+}
+
+
+/* SIDEBAR */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF;
+}
+
+
+/* VERTICAL CONTAINERS */
+
+[data-testid="stVerticalBlock"]>div>[data-testid="stVerticalBlock"] {
+    background-color: #FFFFFF;
+    padding: 10px 30px 10px 30px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+}
+
+/* HORIZONTAL CONTAINERS */
+[data-testid="stHorizontalBlock"]>[data-testid="column"] {
+    background-color: #FFFFFF;
+    padding: 10px 10px 10px 10px;
+    border-radius: 10px;
+}
+
+
+/* TABS */
+.stTabs>div>div>[data-baseweb="tab-list"]>[data-baseweb="tab"] {
+    padding: 10px 10px 10px 10px;
+}
+
+.stTabs>div>div>[data-baseweb="tab-list"]>[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #FFDAD1;
+}
+
+.stTabs>div>div>[data-baseweb="tab-list"]>[data-baseweb="tab"][aria-selected="true"]>[data-testid="stMarkdownContainer"]>p {
+    color: #FF8766;
+    font-weight: bold;
+}
+
+.stTabs>div>div>[data-baseweb="tab-list"]>[data-baseweb="tab"][aria-selected="false"] {
+    background-color: #FFFFFF;
+}
+
+[data-baseweb="tab-border"],
+[data-baseweb="tab-highlight"] {
+    visibility: hidden;
+}
+
+/* METRICS */
+[data-testid="metric-container"] {
+    background-color: #FFFFFF;
+    border-radius: 10px;
+}
+
+[data-testid="stMetricValue"] {
+    font-weight: bold;
+}
+
+/* FUNNEL STAGES */
+.stTabs>.st-er>[data-baseweb="tab-panel"]>div>[data-testid="stVerticalBlock"]>div>[data-testid="stVerticalBlock"]>[data-testid="stHorizontalBlock"] {
+    margin-left: 95px;
+}
+
+.stTabs>.st-er>[data-baseweb="tab-panel"]>div>[data-testid="stVerticalBlock"]>div>[data-testid="stVerticalBlock"]>[data-testid="stHorizontalBlock"]>[data-testid="column"]>div>div>div>.stMarkdown>div>p {
+    margin: 0px;
+}

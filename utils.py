@@ -18,8 +18,6 @@ ctx = snowflake.connector.connect(
 cur = ctx.cursor()
 
 # Get event metadata
-
-
 @st.cache
 def load_event_data(event_id):
     # Execute a query to extract the data
@@ -41,9 +39,8 @@ def load_event_data(event_id):
     df = cur.fetch_pandas_all()
     return df.to_dict('records')[0] if len(df) > 0 else None
 
+
 # Get comparable events
-
-
 @st.cache
 def load_similar_events(event_id, price_threshold):
     # Execute a query to extract the data
@@ -76,8 +73,6 @@ def load_similar_events(event_id, price_threshold):
 
 
 # Get a static set events from a list of IDs
-
-
 @st.cache
 def load_static_event_list(id_list):
     # Execute a query to extract the data
@@ -98,9 +93,8 @@ def load_static_event_list(id_list):
     df = cur.fetch_pandas_all()
     return df
 
+
 # Function to get the total number of bookings by date
-
-
 @st.cache
 def load_bookings_by_date(event_id):
     # Execute a query to extract the data
@@ -108,17 +102,17 @@ def load_bookings_by_date(event_id):
             select
                 timestampdiff(
                     day,
-                    convert_timezone('America/Mexico_City', coalesce(e.activated_at, e.created_at)),
+                    convert_timezone('America/Mexico_City', coalesce(e.first_booking_intended_at, e.created_at)),
                     convert_timezone('America/Mexico_City', cb.paid_at)
                     ) as dias_a_la_venta,
                 count(*) as compras
             from PROD.EVENTS.COMPLETED_BOOKINGS cb
             left join prod.events.events e on e.event_id = cb.event_id
             where cb.event_id in ({','.join(event_id)})
-            and cb.paid_at > coalesce(e.activated_at, e.created_at)
+            and cb.paid_at > coalesce(e.first_booking_intended_at, e.created_at)
             and timestampdiff(
                     day,
-                    convert_timezone('America/Mexico_City', coalesce(e.activated_at, e.created_at)),
+                    convert_timezone('America/Mexico_City', coalesce(e.first_booking_intended_at, e.created_at)),
                     convert_timezone('America/Mexico_City', cb.paid_at)
                     ) between 0 and 180
             group by 1
@@ -129,12 +123,17 @@ def load_bookings_by_date(event_id):
     df = cur.fetch_pandas_all()
     return df
 
+
 @st.cache
 def load_bookings_by_payment_method(event_id):
     # Execute a query to extract the data
     sql = f"""
             select
-                split_part(payment_method, '::', 2) as payment_method,
+                case
+                    when split_part(payment_method, '::', 2) in ('PosCard', 'PosCash') then 'Insiders'
+                    when split_part(payment_method, '::', 2) in ('Paypal', 'BoletiaDeposit', 'Deposit', 'TicketBooth', 'Innova') then 'Inactivos'
+                    ELSE split_part(payment_method, '::', 2)
+                end as payment_method,
                 count(*) as compras
             from PROD.EVENTS.COMPLETED_BOOKINGS cb
             left join prod.events.events e on e.event_id = cb.event_id
@@ -147,11 +146,11 @@ def load_bookings_by_payment_method(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['Banwire', 'PhysicalTicket', 'Cash'], ['Tarjeta de crédito', 'Boleto físico', 'Efectivo'])
     return df
 
+
 # Function to get the total number of customers by age bracket
-
-
 @st.cache
 def load_customers_by_age(event_id):
     # Execute a query to extract the data
@@ -165,9 +164,8 @@ def load_customers_by_age(event_id):
     df = cur.fetch_pandas_all()
     return df
 
+
 # Function to get the total number of customer by gender
-
-
 @st.cache
 def load_customers_by_gender(event_id):
     # Execute a query to extract the data
@@ -180,9 +178,8 @@ def load_customers_by_gender(event_id):
     df = cur.fetch_pandas_all()
     return df
 
+
 # Function to get the total number of bookings by day of the week
-
-
 @st.cache
 def load_bookings_by_week_day(event_id):
     # Execute a query to extract the data
@@ -195,6 +192,8 @@ def load_bookings_by_week_day(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    ['Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'])
     return df
 
 
@@ -279,6 +278,7 @@ def load_pageviews_by_medium(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['(none)', 'referral', 'organic', 'paid social'], ['Directo', 'Referido', 'Orgánico', 'Paid Social'])
     return df
 
 
@@ -310,6 +310,7 @@ def load_pageviews_by_source_medium(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace('(direct) / (none)', 'directo')
     return df
 
 
@@ -347,12 +348,81 @@ def load_bookings_by_city(event_id):
 
 # Function to adjust the data for the pie chart
 # grouping the rows under <min_value> in a new row named 'others'
-def adjust_to_piechart(df, min_value):
+def adjust_to_piechart(df, num_cat):
     others_count = 0
+    df = df.sort_values(by='Compras', ascending=False).reset_index()
+    df['SM'] = ''
     for i in df.index:
-        if df['Compras'][i] < min_value:
+        if i>=num_cat:
             others_count += df['Compras'][i]
             df.drop(i, inplace=True)
+        else:
+            df['SM'][i] = df['SOURCE_MEDIUM'][i] + '\t' + str(df['Compras'][i])
     if others_count > 0:
-        df.loc['Others'] = others_count
+        df = df.append({'SOURCE_MEDIUM': 'otros fuentes/medios', 'Compras': others_count,
+                        'SM': f'otros fuentes/medios\t{others_count}'}, ignore_index=True)
     return df
+
+
+# Function to join the main event data with the similar events data
+def join_data(df1, df2):
+    df1['EVENTO'] = 'Este evento'
+    df2['EVENTO'] = 'Similares'
+    df3 = pd.concat([df1, df2], axis=0)
+    return df3
+
+@st.cache
+def load_customers_by_gender_age(event_id):
+    # Execute a query to extract the data
+    sql = f"""select *
+                    from EVENTS.CUSTOMER_DEMOGRAPHICS_GENDER_AGE
+                    where event_id in ({','.join(event_id)})
+                    """
+    cur.execute(sql)
+    # Converting data into a dataframe
+    df = cur.fetch_pandas_all()
+    df = df.replace(['female', 'male'], ['Mujeres', 'Hombres'])
+    return df
+
+
+def get_5_sources_mediums(df, column):
+    df = df[df['PAGE_PATH']=='Inicio']
+    df = df.sort_values(by='PAGEVIEWS', ascending=False)
+    names = []
+    for i in df.index:
+        names.append(df[column][i])
+    if len(names) > 5:
+        return names[:5]
+    else:
+        return names
+
+
+def local_css(file_name):
+    with open(file_name) as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+
+def remote_css(url):
+    st.markdown(f'<link href="{url}" rel="stylesheet">', unsafe_allow_html=True)
+
+
+def icon(icon_name):
+    st.markdown(f'<i class="material-icons">{icon_name}</i>', unsafe_allow_html=True)
+
+
+def convert_to_funnel(df):
+    # First complete the data with all the stages of the funnel
+    stages = ['Inicio', 'Info', 'Checkout', 'Pago']
+    funnel = df.copy()
+    for s in stages:
+        if s not in funnel['PAGE_PATH'].values:
+            funnel = funnel.append({'PAGE_PATH': s, 'PAGEVIEWS': 0}, ignore_index=True)
+    
+    # Then add the 'shadow' data (difference between stages) to be display in the funnel chart
+    funnel['DATOS'] = 'Etapa actual'
+    for i in range(1,4):
+        previous_stage = int(funnel.loc[(funnel['PAGE_PATH']==stages[i-1]) & (funnel['DATOS']=='Etapa actual')]['PAGEVIEWS'])
+        current_stage = int(funnel.loc[funnel['PAGE_PATH']==stages[i]]['PAGEVIEWS'])
+        dif = previous_stage - current_stage
+        funnel = funnel.append({'PAGE_PATH': stages[i], 'PAGEVIEWS': dif, 'DATOS': 'Diferencia con etapa anterior'}, ignore_index=True)
+    return funnel
