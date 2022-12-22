@@ -3,6 +3,10 @@ section.main {
     background-color: #F7F7F7;
 }
 
+section.main>div {
+    padding-top: 1%;
+}
+
 
 /* SIDEBAR */
 [data-testid="stSidebar"] {
@@ -62,7 +66,7 @@ section.main {
 
 /* FUNNEL STAGES */
 .stTabs>.st-er>[data-baseweb="tab-panel"]>div>[data-testid="stVerticalBlock"]>div>[data-testid="stVerticalBlock"]>[data-testid="stHorizontalBlock"] {
-    margin-left: 95px;
+    margin-left: 5%;
 }
 
 .stTabs>.st-er>[data-baseweb="tab-panel"]>div>[data-testid="stVerticalBlock"]>div>[data-testid="stVerticalBlock"]>[data-testid="stHorizontalBlock"]>[data-testid="column"]>div>div>div>.stMarkdown>div>p {

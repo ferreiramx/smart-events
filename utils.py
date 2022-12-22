@@ -18,6 +18,8 @@ ctx = snowflake.connector.connect(
 cur = ctx.cursor()
 
 # Get event metadata
+
+
 @st.cache
 def load_event_data(event_id):
     # Execute a query to extract the data
@@ -146,7 +148,8 @@ def load_bookings_by_payment_method(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
-    df = df.replace(['Banwire', 'PhysicalTicket', 'Cash'], ['Tarjeta de crédito', 'Boleto físico', 'Efectivo'])
+    df = df.replace(['Banwire', 'PhysicalTicket', 'Cash'], [
+                    'Tarjeta de crédito', 'Boleto físico', 'Efectivo'])
     return df
 
 
@@ -173,9 +176,11 @@ def load_customers_by_gender(event_id):
                     from EVENTS.CUSTOMER_DEMOGRAPHICS_GENDER
                     where event_id in ({','.join(event_id)})
                     """
+    print(sql)
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
+    df = df.replace(['female', 'male'], ['Mujeres', 'Hombres'])
     return df
 
 
@@ -244,7 +249,8 @@ def load_pageviews(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
-    stages = CategoricalDtype(["Inicio", "Info", "Checkout", "Pago"], ordered=True)
+    stages = CategoricalDtype(
+        ["Inicio", "Info", "Checkout", "Pago"], ordered=True)
     df["PAGE_PATH"] = df["PAGE_PATH"].astype(stages)
     df = df.sort_values('PAGE_PATH')
     return df
@@ -278,7 +284,8 @@ def load_pageviews_by_medium(event_id):
     cur.execute(sql)
     # Converting data into a dataframe
     df = cur.fetch_pandas_all()
-    df = df.replace(['(none)', 'referral', 'organic', 'paid social'], ['Directo', 'Referido', 'Orgánico', 'Paid Social'])
+    df = df.replace(['(none)', 'referral', 'organic', 'paid social', 'sendgrid'], [
+                    'Directo', 'Referido', 'Orgánico', 'Paid Social', 'Sendgrid'])
     return df
 
 
@@ -317,7 +324,8 @@ def load_pageviews_by_source_medium(event_id):
 # Function to pivot the data and process the table
 @st.cache
 def get_funnel(df, group_by_field):
-    stages = CategoricalDtype(["Inicio", "Info", "Checkout", "Pago"], ordered=True)
+    stages = CategoricalDtype(
+        ["Inicio", "Info", "Checkout", "Pago"], ordered=True)
     df["PAGE_PATH"] = df["PAGE_PATH"].astype(stages)
     df = df.sort_values('PAGE_PATH')
     # pivot the source_medium values into columns
@@ -325,7 +333,8 @@ def get_funnel(df, group_by_field):
     # replacing nan values to zeros
     df = df.fillna(0)
     df = df.T
-    df['Tasa de conversión'] = df.apply(lambda x: f"{round(x['Pago'] / x['Inicio'] * 100,2)}%", axis = 1)
+    df['Tasa de conversión'] = df.apply(
+        lambda x: f"{round(x['Pago'] / x['Inicio'] * 100,2)}%", axis=1)
     df = df.astype('str')
     df = df.T
     return df
@@ -353,7 +362,7 @@ def adjust_to_piechart(df, num_cat):
     df = df.sort_values(by='Compras', ascending=False).reset_index()
     df['SM'] = ''
     for i in df.index:
-        if i>=num_cat:
+        if i >= num_cat:
             others_count += df['Compras'][i]
             df.drop(i, inplace=True)
         else:
@@ -371,6 +380,7 @@ def join_data(df1, df2):
     df3 = pd.concat([df1, df2], axis=0)
     return df3
 
+
 @st.cache
 def load_customers_by_gender_age(event_id):
     # Execute a query to extract the data
@@ -386,7 +396,7 @@ def load_customers_by_gender_age(event_id):
 
 
 def get_5_sources_mediums(df, column):
-    df = df[df['PAGE_PATH']=='Inicio']
+    df = df[df['PAGE_PATH'] == 'Inicio']
     df = df.sort_values(by='PAGEVIEWS', ascending=False)
     names = []
     for i in df.index:
@@ -403,11 +413,13 @@ def local_css(file_name):
 
 
 def remote_css(url):
-    st.markdown(f'<link href="{url}" rel="stylesheet">', unsafe_allow_html=True)
+    st.markdown(f'<link href="{url}" rel="stylesheet">',
+                unsafe_allow_html=True)
 
 
 def icon(icon_name):
-    st.markdown(f'<i class="material-icons">{icon_name}</i>', unsafe_allow_html=True)
+    st.markdown(
+        f'<i class="material-icons">{icon_name}</i>', unsafe_allow_html=True)
 
 
 def convert_to_funnel(df):
@@ -416,13 +428,72 @@ def convert_to_funnel(df):
     funnel = df.copy()
     for s in stages:
         if s not in funnel['PAGE_PATH'].values:
-            funnel = funnel.append({'PAGE_PATH': s, 'PAGEVIEWS': 0}, ignore_index=True)
-    
+            funnel = funnel.append(
+                {'PAGE_PATH': s, 'PAGEVIEWS': 0}, ignore_index=True)
+
     # Then add the 'shadow' data (difference between stages) to be display in the funnel chart
     funnel['DATOS'] = 'Etapa actual'
-    for i in range(1,4):
-        previous_stage = int(funnel.loc[(funnel['PAGE_PATH']==stages[i-1]) & (funnel['DATOS']=='Etapa actual')]['PAGEVIEWS'])
-        current_stage = int(funnel.loc[funnel['PAGE_PATH']==stages[i]]['PAGEVIEWS'])
+    for i in range(1, 4):
+        previous_stage = int(funnel.loc[(
+            funnel['PAGE_PATH'] == stages[i - 1]) & (funnel['DATOS'] == 'Etapa actual')]['PAGEVIEWS'])
+        current_stage = int(
+            funnel.loc[funnel['PAGE_PATH'] == stages[i]]['PAGEVIEWS'])
         dif = previous_stage - current_stage
-        funnel = funnel.append({'PAGE_PATH': stages[i], 'PAGEVIEWS': dif, 'DATOS': 'Diferencia con etapa anterior'}, ignore_index=True)
+        funnel = funnel.append(
+            {'PAGE_PATH': stages[i], 'PAGEVIEWS': dif, 'DATOS': 'Diferencia con etapa anterior'}, ignore_index=True)
     return funnel
+
+
+def draw_header():
+    st.image(f"frontend/{config.LOGO}", width=250)
+    header = st.container()
+    with header:
+        event_data = st.session_state["event_data"]
+        # Streamlit page title
+        st.title(
+            f"{event_data['NAME'] if config.TARGET != 'DEMO' else 'Ejemplo'}")
+
+        # Columns for event info
+        info_1, info_2, info_3 = st.columns(3, gap="small")
+        info_1.metric(
+            label="Categoría",
+            value=f"{event_data['SUBCATEGORY']  if config.TARGET != 'DEMO' else 'Evento'}",
+            delta=None)
+        info_2.metric(
+            label="Ubicación",
+            value=f"{event_data['CITY'] if config.TARGET != 'DEMO' else 'Ciudad'}, {event_data['STATE'] if config.TARGET != 'DEMO' else 'Estado'}",
+            delta=None)
+        info_3.metric(
+            label="Inicio",
+            value=f"{event_data['STARTED_AT'].strftime('%d/%m/%Y %H:%M hrs')  if config.TARGET != 'DEMO' else '2023-01-01'}",
+            delta=None)
+
+
+def load_css():
+    st.set_page_config(layout="wide")
+    local_css('frontend/streamlit.css')
+    remote_css('https://fonts.googleapis.com/icon?family=Material+Icons')
+
+
+def env_config():
+    # Read variables from config if prod deployment, else let the user write it in
+    if config.TARGET == 'DEV':
+        st.session_state["event_id"] = st.sidebar.text_input(
+            "Event ID", "208150")
+        st.session_state["price_threshold"] = st.sidebar.slider(
+            "% rango de precio", min_value=0.0, max_value=1.0, value=0.1)
+    elif config.TARGET in ['PROD', 'DEMO']:
+        st.session_state["event_id"] = config.EVENT_ID
+        st.session_state["price_threshold"] = config.PRICE_RANGE
+
+    # Load event data
+    st.session_state["event_data"] = load_event_data(
+        st.session_state["event_id"])
+
+    # If hardcoded similar events are set, use them
+    if config.SIMILAR_EVENTS == '':
+        st.session_state["similar_events"] = load_similar_events(
+            st.session_state["event_id"], st.session_state["price_threshold"])
+    else:
+        st.session_state["similar_events"] = load_static_event_list(
+            config.SIMILAR_EVENTS.split(','))
