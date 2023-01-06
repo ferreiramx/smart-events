@@ -211,8 +211,10 @@ def get_coordinates(df):
     for i in df.index:
         city = df['CITY'][i] + ', ' + df['COUNTRY'][i]
         location = geolocator.geocode(city)
-        df['LAT'][i] = location.latitude
-        df['LON'][i] = location.longitude
+        if location:
+            df['LAT'][i] = location.latitude
+            df['LON'][i] = location.longitude
+
     return df
 
 

@@ -72,9 +72,13 @@ with age_container:
 
     with t1:
         total = data['TOTAL_BOOKINGS'].sum()
-        best = f'{data.iloc[data["TOTAL_BOOKINGS"].idxmax(), :]["AGE_BRACKET"]} años'
-        total_best = data.iloc[data["TOTAL_BOOKINGS"].idxmax(),
-                               :]["TOTAL_BOOKINGS"]
+        if len(data["TOTAL_BOOKINGS"] > 0):
+            best = f'{data.iloc[data["TOTAL_BOOKINGS"].idxmax(), :]["AGE_BRACKET"]} años'
+            total_best = data.iloc[data["TOTAL_BOOKINGS"].idxmax(),
+                                   :]["TOTAL_BOOKINGS"]
+        else:
+            best = 'N/A'
+            total_best = 0
         if total < 100:
             st.warning(
                 "Los datos demográficos dependen de que Google perfile un volumen suficiente de usuarios, por lo cual no se garantiza tener esta información para todos los compradores.", icon="⚠️")
